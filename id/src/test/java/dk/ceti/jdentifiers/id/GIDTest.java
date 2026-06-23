@@ -235,6 +235,18 @@ class GIDTest {
     }
 
     @Test
+    void uuid_fromString_sign_hole_coerces_to_zero_prefix() {
+        // Verifies the coercion claim in GID.fromString's javadoc against the
+        // running JDK: "+e83dd89" parses to the same number as "0e83dd89"
+        // (Long.parseLong treats '+' as a sign, then 7 hex digits — value
+        // 0xe83dd89, which equals 0x0e83dd89). If a future JDK closes this
+        // hole UUID.fromString will throw and this test will fail loudly.
+        assertEquals(
+            UUID.fromString("0e83dd89-d106-406c-8eff-53864a4b2d13"),
+            UUID.fromString("+e83dd89-d106-406c-8eff-53864a4b2d13"));
+    }
+
+    @Test
     void fromString_rejects_what_uuid_rejects() {
         // Reject-side parity with UUID.fromString: extra dash, non-hex, over-long.
         assertThrows(IllegalArgumentException.class,
