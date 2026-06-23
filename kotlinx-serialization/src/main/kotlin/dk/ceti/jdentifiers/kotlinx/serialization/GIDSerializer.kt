@@ -21,10 +21,11 @@ object GIDSerializer : KSerializer<GID<IDAble>> {
 
     override fun deserialize(decoder: Decoder): GID<IDAble> {
         val text = decoder.decodeString()
-        try {
-            return GID.fromString(text)
-        } catch (e: IllegalArgumentException) {
-            throw SerializationException("Invalid GID: $text", e)
+        // parseStrict (not lenient fromString): reject non-canonical UUIDs — short
+        // groups and the "sign hole" (+e83dd89-... -> 0e83dd89-...) — rather than
+        // silently coercing them.
+        return GID.parseStrict<IDAble>(text).orElseThrow {
+            SerializationException("Invalid GID: $text")
         }
     }
 }

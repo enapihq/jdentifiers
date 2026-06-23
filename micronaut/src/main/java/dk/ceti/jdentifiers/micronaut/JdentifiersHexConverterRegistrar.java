@@ -42,6 +42,6 @@ public class JdentifiersHexConverterRegistrar implements TypeConverterRegistrar 
         cs.addConverter(GID.class, UUID.class, gid -> gid.asUUID());
         cs.addConverter(GID.class, String.class, gid -> gid.toString());
         cs.addConverter(String.class, GID.class,
-            (s, target, ctx) -> (Optional) GID.parse(s));
+            (s, target, ctx) -> (Optional) GID.parseStrict(s));
     }
 }

@@ -57,16 +57,7 @@ public final class NodeIdStrategies {
             return macAddress(nodeBits, hardwareAddress);
         }
         if (hostname != null) {
-            var mask = (1 << nodeBits) - 1;
-            var m = K8S_DEPLOYMENT_PATTERN.matcher(hostname);
-            if (m.matches()) {
-                return named("kubernetes", nodeBits,
-                    decodeK8sSuffix(m.group(1)) & mask
-                );
-            }
-            return named("hostname", nodeBits,
-                hashHostname(hostname, nodeBits)
-            );
+            return nodeIdFromHostname(nodeBits, hostname);
         }
         return random(nodeBits);
     }
@@ -227,29 +218,33 @@ public final class NodeIdStrategies {
      * <p>Reads {@code HOSTNAME} env var, then {@code InetAddress.getLocalHost()}.
      *
      * @param nodeBits number of node bits (1 to 21)
-     * @return supplier resolved from the hostname
+     * @return a {@code "kubernetes"}-strategy supplier when the pattern
+     *     matches, otherwise a SHA-256 {@code "hostname"} supplier
      */
     public static NodeIdSupplier kubernetes(int nodeBits) {
         validateNodeBits(nodeBits);
         return kubernetes(nodeBits, resolveHostname());
     }
 
-    static NodeIdSupplier kubernetes(int nodeBits, String hostname) {
+    /**
+     * Resolves a node ID from the supplied hostname using the same algorithm
+     * as {@link #kubernetes(int)}, without consulting the environment. The
+     * mapping is deterministic and stable across releases — exposed so
+     * consumers can pin generator output in regression tests.
+     *
+     * @param nodeBits number of node bits (1 to 21)
+     * @param hostname pod hostname; matched against
+     *                 {@code {name}-{rs-hash}-{pod-suffix}}
+     * @return a {@code "kubernetes"}-strategy supplier when the pattern
+     *     matches, otherwise a SHA-256 {@code "hostname"} supplier
+     */
+    public static NodeIdSupplier kubernetes(int nodeBits, String hostname) {
         validateNodeBits(nodeBits);
         if (hostname == null) {
             throw new IllegalStateException(
                 "Unable to determine hostname for node ID");
         }
-        var mask = (1 << nodeBits) - 1;
-        var m = K8S_DEPLOYMENT_PATTERN.matcher(hostname);
-        if (m.matches()) {
-            return named("kubernetes", nodeBits,
-                decodeK8sSuffix(m.group(1)) & mask
-            );
-        }
-        return named("kubernetes", nodeBits,
-            hashHostname(hostname, nodeBits)
-        );
+        return nodeIdFromHostname(nodeBits, hostname);
     }
 
     /**
@@ -267,6 +262,19 @@ public final class NodeIdStrategies {
             value = value * K8S_ALPHABET.length() + index;
         }
         return value;
+    }
+
+    private static NodeIdSupplier nodeIdFromHostname(int nodeBits, String hostname) {
+        var mask = (1 << nodeBits) - 1;
+        var m = K8S_DEPLOYMENT_PATTERN.matcher(hostname);
+        if (m.matches()) {
+            return named("kubernetes", nodeBits,
+                decodeK8sSuffix(m.group(1)) & mask
+            );
+        }
+        return named("hostname", nodeBits,
+            hashHostname(hostname, nodeBits)
+        );
     }
 
     private static String resolveHostnameOrNull() {

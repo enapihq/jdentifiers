@@ -16,11 +16,11 @@ public class JdentifiersHexModule extends SimpleModule {
     public JdentifiersHexModule() {
         super(JdentifiersHexModule.class.getSimpleName(), PackageVersion.VERSION);
         addSerializer((Class) ID.class, new IDHexSerializer());
-        addSerializer((Class) GID.class, new GIDHexSerializer());
+        addSerializer((Class) GID.class, new GIDUuidSerializer());
         addSerializer((Class) LID.class, new LIDHexSerializer());
 
         addDeserializer((Class) ID.class, new IDHexDeserializer());
-        addDeserializer((Class) GID.class, new GIDHexDeserializer());
+        addDeserializer((Class) GID.class, new GIDUuidDeserializer());
         addDeserializer((Class) LID.class, new LIDHexDeserializer());
     }
 }

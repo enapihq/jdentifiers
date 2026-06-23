@@ -42,7 +42,10 @@ class GIDColumnType<T : IDAble> : BasicUuidColumnType<GID<T>>() {
     override fun valueFromDB(value: Any): GID<T> = when (value) {
         is UUID -> GID.fromUuid(value)
         is ByteArray -> GID.fromUuid(ByteBuffer.wrap(value).let { UUID(it.long, it.long) })
-        is String if value.isHexAndDashFormat() -> GID.fromString(value)
+        // We write canonical UUID strings, so a 36-char string read back is
+        // trusted to be one: parse on the fast path (GID.fromString) instead of
+        // the inherited isHexAndDashFormat() regex. Shorter strings are raw bytes.
+        is String if value.length == 36 -> GID.fromString(value)
         is String -> GID.fromUuid(ByteBuffer.wrap(value.toByteArray()).let { UUID(it.long, it.long) })
         is ByteBuffer -> GID.fromUuid(value.let { UUID(it.long, it.long) })
         else -> error("Unexpected value for GID: $value (${value::class.qualifiedName})")
