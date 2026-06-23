@@ -23,6 +23,9 @@ public class GID<T extends IDAble> implements Comparable<GID<?>>, Serializable {
     @Serial
     private static final long serialVersionUID = 4886811489207381608L;
 
+    private static final int GID_STRING_LENGTH = 36;
+    private static final int GID_HEX_LENGTH = 32;
+
     private final UUID uuid;
 
     private GID(UUID uuid) {
@@ -32,9 +35,12 @@ public class GID<T extends IDAble> implements Comparable<GID<?>>, Serializable {
     /**
      * Creates a GID from a UUID string representation.
      *
-     * <p>Accepts {@link CharSequence} for API consistency with {@link ID#fromString}
-     * and {@link LID#fromString}. Note: internally calls {@code toString()} on the
-     * input because {@link UUID#fromString} requires a {@link String}.
+     * <p>Behaves exactly like {@link UUID#fromString}: it accepts the same
+     * inputs, including non-canonical forms such as {@code "1-1-1-1-1"} (short
+     * groups) and a leading {@code '+'} sign on a group (the "sign hole", e.g.
+     * {@code "+e83dd89-..."} is coerced to {@code "0e83dd89-..."}). This keeps
+     * the method free of surprises for callers who expect {@code UUID.fromString}
+     * semantics. For canonical-only validation, use {@link #parseStrict}.
      *
      * @param <R>    the entity type
      * @param gidStr UUID string representation
@@ -47,21 +53,86 @@ public class GID<T extends IDAble> implements Comparable<GID<?>>, Serializable {
         return new GID<>(UUID.fromString(gidStr.toString()));
     }
 
+    private static boolean isSign(char c) {
+        return c == '+' || c == '-';
+    }
+
     /**
-     * Parses a UUID string, returning empty if the input is null or
-     * malformed. Unlike {@link #fromString(CharSequence)}, this method
-     * never throws.
+     * Parses a UUID string strictly, accepting only the canonical 36-character
+     * {@code 8-4-4-4-12} hex form (dashes at positions 8, 13, 18, 23),
+     * case-insensitively, and returning empty otherwise. Never throws.
+     *
+     * <p>Unlike {@link #fromString} (which mirrors the lenient
+     * {@link UUID#fromString}), this rejects the non-canonical forms
+     * {@code UUID.fromString} would otherwise accept: short groups such as
+     * {@code "1-1-1-1-1"}, oversized groups, and a leading {@code '+'}/{@code '-'}
+     * sign on any group (the "sign hole" — {@code UUID.fromString} parses each
+     * group as a <em>signed</em> hex number, so a sign at a group start, indices
+     * 0/9/14/19/24, would be silently consumed rather than rejected).
      *
      * @param <T>    the entity type
      * @param gidStr UUID string, or null
+     * @return the parsed GID, or empty if null or not canonical
+     */
+    public static <T extends IDAble> Optional<GID<T>> parseStrict(CharSequence gidStr) {
+        if (gidStr == null || !isCanonicalUuid(gidStr)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(fromString(gidStr));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static boolean isCanonicalUuid(CharSequence s) {
+        return s.length() == GID_STRING_LENGTH
+            && s.charAt(8) == '-' && s.charAt(13) == '-'
+            && s.charAt(18) == '-' && s.charAt(23) == '-'
+            && !isSign(s.charAt(0)) && !isSign(s.charAt(9))
+            && !isSign(s.charAt(14)) && !isSign(s.charAt(19)) && !isSign(s.charAt(24));
+    }
+
+    /**
+     * Parses a UUID string in either representation, returning empty for null
+     * or unrecognized input; never throws. Accepts both:
+     * <ul>
+     *   <li>the dashed forms that {@link #fromString} accepts (canonical UUID,
+     *       and the lenient {@link UUID#fromString} variants); and</li>
+     *   <li>the dashless 32-character hex form (16 bytes, no dashes) — e.g. a
+     *       W3C {@code traceparent} trace-id.</li>
+     * </ul>
+     * The dashless form is matched first by its exact 32-char length.
+     *
+     * @param <T>    the entity type
+     * @param gidStr UUID string (dashed or 32-char hex), or null
      * @return the parsed GID, or empty
      */
-    public static <T extends IDAble> Optional<GID<T>> parse(CharSequence gidStr) {
+    public static <T extends IDAble> Optional<GID<T>> parseLenient(CharSequence gidStr) {
+        if (gidStr == null) {
+            return Optional.empty();
+        }
+        if (gidStr.length() == GID_HEX_LENGTH) {
+            return parseHex(gidStr);
+        }
         try {
-            if (gidStr == null) {
-                return Optional.empty();
-            }
             return Optional.of(fromString(gidStr));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static <T extends IDAble> Optional<GID<T>> parseHex(CharSequence hex) {
+        try {
+            long msb = 0L;
+            for (int i = 0; i < 16; i++) {
+                msb = (msb << 4) | HexCodec.getHexValue(hex.charAt(i));
+            }
+            long lsb = 0L;
+            for (int i = 16; i < GID_HEX_LENGTH; i++) {
+                lsb = (lsb << 4) | HexCodec.getHexValue(hex.charAt(i));
+            }
+            return Optional.of(new GID<>(new UUID(msb, lsb)));
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }

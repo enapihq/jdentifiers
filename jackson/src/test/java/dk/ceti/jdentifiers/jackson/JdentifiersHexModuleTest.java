@@ -101,6 +101,17 @@ class JdentifiersHexModuleTest {
         assertTrue(ex.getMessage().contains("Invalid GID format"));
     }
 
+    @Test
+    void deserializeSignPrefixedGIDIsRejected() {
+        // java.util.UUID.fromString would accept "+e83dd89-..." as a sign and
+        // silently coerce it to "0e83dd89-...". GID.fromString is strict, so the
+        // jackson deserializer rejects it instead of silently accepting it.
+        var ex = assertThrows(JsonProcessingException.class, () ->
+            mapper.readValue("\"+e83dd89-d106-406c-8eff-53864a4b2d13\"", GID.class)
+        );
+        assertTrue(ex.getMessage().contains("Invalid GID format"));
+    }
+
     // --- LID tests ---
 
     @Test

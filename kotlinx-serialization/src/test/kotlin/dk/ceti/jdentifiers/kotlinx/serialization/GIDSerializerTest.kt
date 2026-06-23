@@ -6,9 +6,9 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
 
 class GIDSerializerTest {
 
@@ -55,14 +55,22 @@ class GIDSerializerTest {
         val ex = assertFailsWith<SerializationException> {
             json.decodeFromString(GIDSerializer, "\"not-a-uuid\"")
         }
-        assertIs<IllegalArgumentException>(ex.cause)
+        assertContains(ex.message ?: "", "not-a-uuid")
     }
 
     @Test
     fun `deserialize empty string throws SerializationException`() {
-        val ex = assertFailsWith<SerializationException> {
+        assertFailsWith<SerializationException> {
             json.decodeFromString(GIDSerializer, "\"\"")
         }
-        assertIs<IllegalArgumentException>(ex.cause)
+    }
+
+    @Test
+    fun `deserialize sign-prefixed UUID throws SerializationException`() {
+        // parseStrict rejects the "sign hole" rather than coercing
+        // "+e83dd89-..." into "0e83dd89-...".
+        assertFailsWith<SerializationException> {
+            json.decodeFromString(GIDSerializer, "\"+e83dd89-d106-406c-8eff-53864a4b2d13\"")
+        }
     }
 }

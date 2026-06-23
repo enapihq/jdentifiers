@@ -201,25 +201,193 @@ class GIDTest {
     }
 
 
+    // ------------------------------------------------------------------
+    // GID.fromString mirrors java.util.UUID.fromString (lenient, no surprises).
+    // Strict canonical validation lives in parseStrict (below).
+    // ------------------------------------------------------------------
+
     @Test
-    void parse_valid_uuid() {
-        var result = GID.<User>parse("01234567-89ab-7def-8123-456789abcdef");
+    void fromString_accepts_uppercase_canonical() {
+        final GID<User> gid = GID.fromString("550E8400-E29B-41D4-A716-446655440000");
+        assertEquals(UUID_A, gid.asUUID());
+    }
+
+    @Test
+    void fromString_accepts_mixed_case_canonical() {
+        assertEquals(UUID_A, GID.<User>fromString("550e8400-E29B-41d4-A716-446655440000").asUUID());
+    }
+
+    @Test
+    void fromString_lenient_like_uuid_short_groups() {
+        // UUID.fromString accepts short groups; GID.fromString mirrors it.
+        assertEquals(
+            UUID.fromString("1-1-1-1-1"),
+            GID.<User>fromString("1-1-1-1-1").asUUID());
+    }
+
+    @Test
+    void fromString_lenient_like_uuid_sign_prefix() {
+        // The "sign hole": UUID.fromString coerces a leading '+' into a sign.
+        // GID.fromString matches that (use parseStrict to reject it).
+        assertEquals(
+            UUID.fromString("+e83dd89-d106-406c-8eff-53864a4b2d13"),
+            GID.<User>fromString("+e83dd89-d106-406c-8eff-53864a4b2d13").asUUID());
+    }
+
+    @Test
+    void uuid_fromString_sign_hole_coerces_to_zero_prefix() {
+        // Verifies the coercion claim in GID.fromString's javadoc against the
+        // running JDK: "+e83dd89" parses to the same number as "0e83dd89"
+        // (Long.parseLong treats '+' as a sign, then 7 hex digits — value
+        // 0xe83dd89, which equals 0x0e83dd89). If a future JDK closes this
+        // hole UUID.fromString will throw and this test will fail loudly.
+        assertEquals(
+            UUID.fromString("0e83dd89-d106-406c-8eff-53864a4b2d13"),
+            UUID.fromString("+e83dd89-d106-406c-8eff-53864a4b2d13"));
+    }
+
+    @Test
+    void fromString_rejects_what_uuid_rejects() {
+        // Reject-side parity with UUID.fromString: extra dash, non-hex, over-long.
+        assertThrows(IllegalArgumentException.class,
+            () -> GID.fromString("-e83dd89-d106-406c-8eff-53864a4b2d13"));
+        assertThrows(IllegalArgumentException.class,
+            () -> GID.fromString("gggggggg-gggg-gggg-gggg-gggggggggggg"));
+        assertThrows(IllegalArgumentException.class,
+            () -> GID.fromString("550e8400-e29b-41d4-a716-4466554400000"));
+    }
+
+    // ------------------------------------------------------------------
+    // GID.parseStrict accepts ONLY the canonical 8-4-4-4-12 hex form
+    // (case-insensitive) and returns empty otherwise; never throws. It rejects
+    // the non-canonical forms UUID.fromString / GID.fromString would accept.
+    // ------------------------------------------------------------------
+
+    @Test
+    void parseStrict_valid_uuid() {
+        var result = GID.<User>parseStrict("01234567-89ab-7def-8123-456789abcdef");
         assertTrue(result.isPresent());
         assertEquals("01234567-89ab-7def-8123-456789abcdef", result.get().toString());
     }
 
     @Test
-    void parse_invalid_string() {
-        assertTrue(GID.parse("not-a-uuid").isEmpty());
+    void parseStrict_accepts_upper_mixed_nil_max() {
+        assertTrue(GID.parseStrict("550E8400-E29B-41D4-A716-446655440000").isPresent());
+        assertTrue(GID.parseStrict("550e8400-E29B-41d4-A716-446655440000").isPresent());
+        assertTrue(GID.parseStrict("00000000-0000-0000-0000-000000000000").isPresent());
+        assertTrue(GID.parseStrict("ffffffff-ffff-ffff-ffff-ffffffffffff").isPresent());
     }
 
     @Test
-    void parse_null() {
-        assertTrue(GID.parse(null).isEmpty());
+    void parseStrict_null() {
+        assertTrue(GID.parseStrict(null).isEmpty());
     }
 
     @Test
-    void parse_empty() {
-        assertTrue(GID.parse("").isEmpty());
+    void parseStrict_empty() {
+        assertTrue(GID.parseStrict("").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_not_a_uuid() {
+        assertTrue(GID.parseStrict("not-a-uuid").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_short_segments() {
+        assertTrue(GID.parseStrict("1-1-1-1-1").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_leading_plus_sign() {
+        assertTrue(GID.parseStrict("+e83dd89-d106-406c-8eff-53864a4b2d13").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_plus_sign_in_later_group() {
+        assertTrue(GID.parseStrict("ee83dd89-+106-406c-8eff-53864a4b2d13").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_leading_minus_sign() {
+        assertTrue(GID.parseStrict("-e83dd89-d106-406c-8eff-53864a4b2d13").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_oversized_segment() {
+        assertTrue(GID.parseStrict("00000000-0000-0000-0000-0000000000001").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_misplaced_dash() {
+        assertTrue(GID.parseStrict("de83dd8-9d106-406c-8eff-53864a4b2d13").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_non_hex_char() {
+        assertTrue(GID.parseStrict("gggggggg-gggg-gggg-gggg-gggggggggggg").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_trailing_whitespace() {
+        assertTrue(GID.parseStrict("550e8400-e29b-41d4-a716-446655440000 ").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_too_short() {
+        assertTrue(GID.parseStrict("550e8400-e29b-41d4-a716-44665544000").isEmpty());
+    }
+
+    @Test
+    void parseStrict_rejects_too_long() {
+        assertTrue(GID.parseStrict("550e8400-e29b-41d4-a716-4466554400000").isEmpty());
+    }
+
+    // ------------------------------------------------------------------
+    // GID.parseLenient accepts BOTH the dashed UUID forms and the dashless
+    // 32-char hex form (e.g. a W3C traceparent trace-id). Never throws.
+    // ------------------------------------------------------------------
+
+    @Test
+    void parseLenient_accepts_canonical_dashed() {
+        var result = GID.<User>parseLenient("4bf92f35-77b3-4da6-a3ce-929d0e0e4736");
+        assertTrue(result.isPresent());
+        assertEquals("4bf92f35-77b3-4da6-a3ce-929d0e0e4736", result.get().toString());
+    }
+
+    @Test
+    void parseLenient_accepts_dashless_32_hex() {
+        // W3C traceparent trace-id form: 32 hex chars, no dashes.
+        var result = GID.<User>parseLenient("4bf92f3577b34da6a3ce929d0e0e4736");
+        assertTrue(result.isPresent());
+        assertEquals("4bf92f35-77b3-4da6-a3ce-929d0e0e4736", result.get().toString());
+    }
+
+    @Test
+    void parseLenient_dashless_matches_dashed() {
+        assertEquals(
+            GID.<User>parseLenient("4bf92f35-77b3-4da6-a3ce-929d0e0e4736"),
+            GID.<User>parseLenient("4bf92f3577b34da6a3ce929d0e0e4736"));
+    }
+
+    @Test
+    void parseLenient_accepts_lenient_dashed_form() {
+        // Delegates to fromString for dashed input, so UUID.fromString leniency applies.
+        assertTrue(GID.parseLenient("1-1-1-1-1").isPresent());
+    }
+
+    @Test
+    void parseLenient_null() {
+        assertTrue(GID.parseLenient(null).isEmpty());
+    }
+
+    @Test
+    void parseLenient_rejects_31_hex() {
+        assertTrue(GID.parseLenient("4bf92f3577b34da6a3ce929d0e0e473").isEmpty());
+    }
+
+    @Test
+    void parseLenient_rejects_non_hex_32() {
+        assertTrue(GID.parseLenient("gggggggggggggggggggggggggggggggg").isEmpty());
     }
 }

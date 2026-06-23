@@ -8,12 +8,12 @@ import dk.ceti.jdentifiers.id.GID;
 import java.io.IOException;
 import java.io.Serial;
 
-public class GIDHexSerializer extends StdScalarSerializer<GID<?>> {
+public class GIDUuidSerializer extends StdScalarSerializer<GID<?>> {
     @Serial
     private static final long serialVersionUID = 1L;
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    public GIDHexSerializer() {
+    public GIDUuidSerializer() {
         super((Class) GID.class);
     }
 
